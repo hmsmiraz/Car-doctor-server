@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
+const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 require('dotenv').config();
 // const ObjectId = require("mongodb").ObjectId;
@@ -10,6 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { JsonWebTokenError } = require('jsonwebtoken');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.meftkqt.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -29,6 +31,22 @@ async function run() {
     const serviceCOllection = client.db('carDoctor').collection('services');
     const bookingCollection = client.db('carDoctor').collection('bookings');
 
+    //auth
+    app.post('/jwt', async(req, res)=>{
+      const user = req.body;
+      console.log(user);
+      // res.send(user);
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1h'});
+      res
+      .cookie('token', token, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'none'
+      })
+      .send({ Success: true });
+    })
+
+    //service 
     app.get('/services', async(req, res)=>{
         const cursor = serviceCOllection.find();
         const result = await cursor.toArray();
@@ -54,7 +72,7 @@ async function run() {
     });
 
     app.get('/bookings', async(req, res) =>{
-      console.log(req.query.email);
+      // console.log(req.query.email);
       let query = {};
       if (req.query?.email) {
         query = { email: req.query.email }
@@ -67,7 +85,7 @@ async function run() {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const updateBooking = req.body;
-      console.log(updateBooking);
+      // console.log(updateBooking);
       const updateDOc = {
         $set: {
           status: updateBooking.status
