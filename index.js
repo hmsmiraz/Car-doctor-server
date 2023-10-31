@@ -2,13 +2,20 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const port = process.env.PORT || 5000;
 require('dotenv').config();
 // const ObjectId = require("mongodb").ObjectId;
 
+// node -> require('crypto').randomBytes(64).toString('hex')
+
 //middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { JsonWebTokenError } = require('jsonwebtoken');
@@ -23,6 +30,32 @@ const client = new MongoClient(uri, {
   }
 });
 
+//middlewares
+const logger = async( req, res, next) =>{
+  console.log('Called:', req.host, req.originalUrl)
+  next();
+}
+
+const verifyToken = async(req, res, next) =>{
+  const token = req.cookies?.token;
+  console.log("token from middleware", token);
+  if(!token){
+    return res.status(401).send({message: 'Not authorized'})
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) =>{
+    // error
+    if(error){
+      console.log(error);
+      return res.status(401).send({message: 'Unauthorized'})
+    }
+    //decoded
+    console.log('Value in the token', decoded);
+    req.user = decoded;
+    next();
+  })
+}
+
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -34,20 +67,20 @@ async function run() {
     //auth
     app.post('/jwt', async(req, res)=>{
       const user = req.body;
-      console.log(user);
+      // console.log(user);
       // res.send(user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1h'});
       res
       .cookie('token', token, {
         httpOnly: true,
         secure: false,
-        sameSite: 'none'
+        // sameSite: 'none'
       })
       .send({ Success: true });
     })
 
     //service 
-    app.get('/services', async(req, res)=>{
+    app.get('/services', logger, async(req, res)=>{
         const cursor = serviceCOllection.find();
         const result = await cursor.toArray();
         res.send(result);
@@ -71,8 +104,10 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/bookings', async(req, res) =>{
+    app.get('/bookings', logger, verifyToken, async(req, res) =>{
       // console.log(req.query.email);
+      //console.log("token- ", req.cookies.token);
+      console.log("User from valid token", req.user);
       let query = {};
       if (req.query?.email) {
         query = { email: req.query.email }
