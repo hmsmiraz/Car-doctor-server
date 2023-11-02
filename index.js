@@ -32,13 +32,14 @@ const client = new MongoClient(uri, {
 
 //middlewares
 const logger = async( req, res, next) =>{
-  console.log('Called:', req.host, req.originalUrl)
+  console.log('Log Info:', req.method, req.url);
   next();
 }
 
 const verifyToken = async(req, res, next) =>{
-  const token = req.cookies?.token;
-  console.log("token from middleware", token);
+  const token = req?.cookies?.token;
+  console.log("Token from middleware- ", token);
+  // for no token
   if(!token){
     return res.status(401).send({message: 'Not authorized'})
   }
@@ -49,7 +50,7 @@ const verifyToken = async(req, res, next) =>{
       return res.status(401).send({message: 'Unauthorized'})
     }
     //decoded
-    console.log('Value in the token', decoded);
+    console.log('Value in the token- ', decoded);
     req.user = decoded;
     next();
   })
@@ -65,7 +66,7 @@ async function run() {
     const bookingCollection = client.db('carDoctor').collection('bookings');
 
     //auth
-    app.post('/jwt', async(req, res)=>{
+    app.post('/jwt', logger, async(req, res)=>{
       const user = req.body;
       // console.log(user);
       // res.send(user);
@@ -73,11 +74,18 @@ async function run() {
       res
       .cookie('token', token, {
         httpOnly: true,
-        secure: false,
-        // sameSite: 'none'
+        secure: true,
+        sameSite: 'none'
       })
       .send({ Success: true });
     })
+
+    app.post('/logout', async(req, res)=>{
+      const user = req.body;
+      console.log("Log out", user);
+      res.clearCookie('token', {maxAge: 0 }).send({ Success: true });
+    });
+
 
     //service 
     app.get('/services', logger, async(req, res)=>{
@@ -105,9 +113,12 @@ async function run() {
     });
 
     app.get('/bookings', logger, verifyToken, async(req, res) =>{
-      // console.log(req.query.email);
+      console.log(req.query.email);
       //console.log("token- ", req.cookies.token);
       console.log("User from valid token", req.user);
+      if(req.user.email !== req.query.email){
+        return res.status(403).send({ message: "Forbidden Access"});
+      }
       let query = {};
       if (req.query?.email) {
         query = { email: req.query.email }
